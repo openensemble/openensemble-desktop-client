@@ -1,10 +1,10 @@
-# OpenEnsemble Desktop
+# OpenEnsemble Desktop Client
 
 The desktop client for your OpenEnsemble server, available for **Windows x64**
 and **Linux x64**.
 
 **[Download for your computer](https://openensemble.github.io/openensemble/desktop/)** ·
-**[Latest release](https://github.com/openensemble/desktop/releases/latest)**
+**[Latest release](https://github.com/openensemble/openensemble-desktop-client/releases/latest)**
 
 The OE webpage selects the download for your operating system and also offers
 both platform choices. This repository hosts installers and update metadata;
