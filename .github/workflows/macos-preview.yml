@@ -1,0 +1,82 @@
+name: macOS preview build and smoke test
+
+# This workflow can live in the public releases-only repository. Source remains
+# in an authenticated draft-release asset and is checked against a reviewed hash.
+on:
+  workflow_dispatch:
+    inputs:
+      source_release:
+        description: Draft release tag containing macos-source.tar.gz
+        required: true
+        type: string
+      source_sha256:
+        description: SHA-256 from the reviewed local source-receipt.json
+        required: true
+        type: string
+
+permissions:
+  # GitHub only exposes draft releases to callers with push access. The token
+  # is passed only to the download step; this workflow never changes a release.
+  contents: write
+
+jobs:
+  preview:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Fetch the reviewed draft source bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RELEASE: ${{ inputs.source_release }}
+          SOURCE_SHA256: ${{ inputs.source_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RELEASE" =~ ^[A-Za-z0-9._-]+$ ]]
+          [[ "$SOURCE_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]]
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$SOURCE_RELEASE" --jq .draft)" = true
+          mkdir -p "$RUNNER_TEMP/oe-mac-source" "$RUNNER_TEMP/oe-mac-download"
+          gh release download "$SOURCE_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern macos-source.tar.gz --dir "$RUNNER_TEMP/oe-mac-download"
+          printf '%s  %s\n' "$SOURCE_SHA256" "$RUNNER_TEMP/oe-mac-download/macos-source.tar.gz" | shasum -a 256 -c -
+          tar -xzf "$RUNNER_TEMP/oe-mac-download/macos-source.tar.gz" -C "$RUNNER_TEMP/oe-mac-source"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Install and run shared checks
+        working-directory: ${{ runner.temp }}/oe-mac-source
+        run: npm ci && npm run check && npm test
+      - name: Build the native preview
+        working-directory: ${{ runner.temp }}/oe-mac-source
+        run: npm run dist:mac:preview -- --arch=${{ matrix.arch }}
+      - name: Launch the packaged app and test local integration
+        working-directory: ${{ runner.temp }}/oe-mac-source
+        env:
+          OE_MAC_PREVIEW_ARCH: ${{ matrix.arch }}
+        run: npm run test:mac:preview
+      # This repository is public. Retain diagnostics only; installers stay on
+      # the temporary runner and are never uploaded or published by this job.
+      - name: Retain build and test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-preview-${{ matrix.arch }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/oe-mac-source/dist/macos-preview/${{ matrix.arch }}/SHA256SUMS.txt
+            ${{ runner.temp }}/oe-mac-source/dist/macos-preview/${{ matrix.arch }}/build-receipt.json
+            ${{ runner.temp }}/oe-mac-source/out/macos-smoke-${{ matrix.arch }}/*
