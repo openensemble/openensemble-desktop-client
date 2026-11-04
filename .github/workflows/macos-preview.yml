@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           [[ "$SOURCE_RELEASE" =~ ^[A-Za-z0-9._-]+$ ]]
           [[ "$SOURCE_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]]
-          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$SOURCE_RELEASE" --jq .draft)" = true
+          test "$(gh release view "$SOURCE_RELEASE" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
           mkdir -p "$RUNNER_TEMP/oe-mac-source" "$RUNNER_TEMP/oe-mac-download"
           gh release download "$SOURCE_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern macos-source.tar.gz --dir "$RUNNER_TEMP/oe-mac-download"
           printf '%s  %s\n' "$SOURCE_SHA256" "$RUNNER_TEMP/oe-mac-download/macos-source.tar.gz" | shasum -a 256 -c -
